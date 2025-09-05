@@ -1,0 +1,576 @@
+#include <iostream>
+#include <vector>
+#include <string>
+#include <fstream>
+#include <cstdlib>
+#include <map>
+#include <TFile.h>
+#include <TTree.h>
+#include <TH1F.h>
+#include <TH2F.h>
+#include <TLorentzVector.h>
+#include <TStyle.h>
+#include <TMath.h>
+#include <TROOT.h>
+#include <TKey.h>
+#include "Utilities.h"
+using namespace std;
+
+class MCPhotonAnalyser {
+
+private:
+  //Photon variable
+  Int_t nPho;
+  vector<float>* phoPt;
+  vector<float>* phoPhi;
+  vector<float>* phoSCEta;
+  vector<float>* phoMIPTotEnergy;
+  vector<float>* phoSigmaIEtaIEtaFull5x5;
+  vector<float>* phoSigmaIPhiIPhiFull5x5;
+  vector<float>* phoSeedTime;
+  vector<int>* phohasPixelSeed;
+  vector<float>* phoSCEtaWidth;
+  vector<float>* phoHaloTaggerMVAVal;
+  vector<UShort_t>* phoIDbit;
+
+  // MC weight variable
+  Float_t genWeight;
+
+  //Jet variables
+  UShort_t nAK4PUPPIJet;
+  vector<float>* AK4PUPPIJet_Pt;
+  vector<float>* AK4PUPPIJet_Eta;
+  vector<float>* AK4PUPPIJet_Phi;
+  vector<float>* AK4PUPPIJet_jetID;
+
+  // MET variables
+  Float_t PuppiMET_pt;
+  Float_t PuppiMET_phi;
+
+  // HLT trigger
+  UShort_t HLTriggerWord0;
+
+  // MET filter variables
+  Bool_t Flag_goodVertices;
+  Bool_t Flag_globalSuperTightHalo2016Filter;
+  Bool_t Flag_EcalDeadCellTriggerPrimitiveFilter;
+  Bool_t Flag_BadPFMuonFilter;
+  Bool_t Flag_BadPFMuonDzFilter;
+  Bool_t Flag_hfNoisyHitsFilter;
+  Bool_t Flag_eeBadScFilter;
+
+  TFile* outputFile;
+  
+  // Cross sections in pb
+  std::map<std::string, double> crossSections;
+  double totalLuminosity; // in fb^-1
+
+  // Unweighted histograms
+  TH1F* h_pT_pho_EB;
+  TH1F* h_pT_pho_EE;
+  TH1F* h_eta_pho_EB;
+  TH1F* h_eta_pho_EE;
+  TH1F* h_phi_pho_EB;
+  TH1F* h_phi_pho_EE;
+  TH1F* h_pt_Met_EB;
+  TH1F* h_phi_Met_EB;
+  TH1F* h_pt_Met_EE;
+  TH1F* h_phi_Met_EE;
+  TH1F* h_jet_deltaPhi_MET_EB;
+  TH1F* h_deltaR_pho_jet_EB;
+  TH1F* h_jet_deltaPhi_MET_EE;
+  TH1F* h_deltaR_pho_jet_EE;
+  TH1F* h_cutflow;
+  
+  // Weighted histograms
+  TH1F* h_pT_pho_EB_weighted;
+  TH1F* h_pT_pho_EE_weighted;
+  TH1F* h_eta_pho_EB_weighted;
+  TH1F* h_eta_pho_EE_weighted;
+  TH1F* h_phi_pho_EB_weighted;
+  TH1F* h_phi_pho_EE_weighted;
+  TH1F* h_pt_Met_EB_weighted;
+  TH1F* h_phi_Met_EB_weighted;
+  TH1F* h_pt_Met_EE_weighted;
+  TH1F* h_phi_Met_EE_weighted;
+  TH1F* h_jet_deltaPhi_MET_EB_weighted;
+  TH1F* h_deltaR_pho_jet_EB_weighted;
+  TH1F* h_jet_deltaPhi_MET_EE_weighted;
+  TH1F* h_deltaR_pho_jet_EE_weighted;
+    
+  // Counters
+  double total_events;
+  double photon_met_cuts_pass;
+  double hlt_pass;
+  double met_filters_pass;
+  double pt_pass;
+  double pixel_seed_veto_pass;
+  double beamhalo_pass;
+  double tight_id_pass;
+  double met_cuts_pass;
+  double jet_veto_pass;
+  double barrel_pass;
+  double endcap_pass;
+  double barrel_all_cuts;
+  
+  // Sample info for weighting
+  std::string currentSample;
+  double sumGenWeights;
+  double eventWeightFactor;
+  double eventWeight;
+
+public:
+  MCPhotonAnalyser() :
+    phoPt(nullptr), phoPhi(nullptr), phoSCEta(nullptr), phoMIPTotEnergy(nullptr),
+    phoSigmaIEtaIEtaFull5x5(nullptr), phoSigmaIPhiIPhiFull5x5(nullptr), phoSeedTime(nullptr),
+    phohasPixelSeed(nullptr), phoSCEtaWidth(nullptr), phoHaloTaggerMVAVal(nullptr),phoIDbit(nullptr),
+    AK4PUPPIJet_Pt(nullptr), AK4PUPPIJet_Eta(nullptr), AK4PUPPIJet_Phi(nullptr), AK4PUPPIJet_jetID(nullptr),
+    outputFile(nullptr),
+    total_events(0), hlt_pass(0), met_filters_pass(0), pt_pass(0), 
+    pixel_seed_veto_pass(0), met_cuts_pass(0), jet_veto_pass(0), beamhalo_pass(0),tight_id_pass(0),
+    barrel_pass(0), endcap_pass(0), barrel_all_cuts(0), sumGenWeights(0.0), eventWeightFactor(1.0), eventWeight(1.0) {
+    
+    // Initialize cross sections (in pb)
+    crossSections["ZGto2NuG-1Jets_PTG-200to400"] = 7.472e-02;
+    crossSections["ZGto2NuG-1Jets_PTG-400to600"] = 5.601e-03;
+    crossSections["ZGto2NuG-1Jets_PTG-600"] = 1.161e-03;
+
+    //WG cross section
+    crossSections["WGtoLNuG-1Jets_PTG-200to400"] = 2.841e-01;
+    crossSections["WGtoLNuG-1Jets_PTG-400to600"] = 2.230e-02;
+    crossSections["WGtoLNuG-1Jets_PTG-600"] = 4.802e-03;
+
+    //TTG cross section
+    crossSections["TTG-1Jets_PTG-200"] = 1.286e-01;
+      
+    //WW cross section
+    crossSections["WW_TuneCP5_13p6TeV"] = 8.017e+01;
+
+    //WZ cross section
+    crossSections["WZ_TuneCP5_13p6TeV"] = 2.920e+01;
+    
+    //ZZ cross section
+    crossSections["ZZ_TuneCP5_13p6TeV"] = 1.285e+01;
+    
+    //GJ cross section
+    crossSections["GJ_PTG-200to400"] = 8.856e+01;
+    crossSections["GJ_PTG-400to600"] = 3.782e+00;
+    crossSections["GJ_PTG-600"] = 5.784e-01;
+    
+    // Total luminosity in fb^-1
+    totalLuminosity = 4.343001987 + 1.270749295 + 1.606429085 + 10.842478597; // = 18.062658964 fb^-1  for era C EGamma0
+  }
+  
+  ~MCPhotonAnalyser() {
+    if (outputFile && outputFile->IsOpen()) {
+      outputFile->Close();
+      delete outputFile;
+    }
+  }
+
+ 
+ 
+  std::string extractSampleType(const std::string& filename) {
+    if (filename.find("ZGto2NuG-1Jets_PTG-200to400") != std::string::npos) {
+      return "ZGto2NuG-1Jets_PTG-200to400";
+    } else if (filename.find("ZGto2NuG-1Jets_PTG-400to600") != std::string::npos) {
+      return "ZGto2NuG-1Jets_PTG-400to600";
+    } else if (filename.find("ZGto2NuG-1Jets_PTG-600") != std::string::npos) {
+      return "ZGto2NuG-1Jets_PTG-600";
+    }else if (filename.find("WGtoLNuG-1Jets_PTG-200to400") != std::string::npos) {
+      return "WGtoLNuG-1Jets_PTG-200to400";
+    }else if (filename.find("WGtoLNuG-1Jets_PTG-400to600") != std::string::npos) {
+      return "WGtoLNuG-1Jets_PTG-400to600";
+    }else if (filename.find("WGtoLNuG-1Jets_PTG-600")!= std::string::npos) {
+      return "WGtoLNuG-1Jets_PTG-600";
+    }else if (filename.find("TTG-1Jets_PTG-200")!= std::string::npos) {
+      return "TTG-1Jets_PTG-200";
+    }else if (filename.find("WW_TuneCP5_13p6TeV")!= std::string::npos) {
+      return "WW_TuneCP5_13p6TeV";
+    }else if (filename.find("WZ_TuneCP5_13p6TeV")!= std::string::npos) {
+      return "WZ_TuneCP5_13p6TeV";
+    }else if (filename.find("ZZ_TuneCP5_13p6TeV")!= std::string::npos) {
+      return "ZZ_TuneCP5_13p6TeV";
+    }else if (filename.find("GJ_PTG-200to400")!= std::string::npos) {
+      return "GJ_PTG-200to400";
+    }else if (filename.find("GJ_PTG-400to600")!= std::string::npos) {
+      return "GJ_PTG-400to600";
+    }else if (filename.find("GJ_PTG-600")!= std::string::npos) {
+      return "GJ_PTG-600";
+    }
+    
+    return "unknown";
+  }
+  
+  void setupInputBranches(TTree* tree) {
+    // Reset pointers
+    phoPt = nullptr;
+    phoPhi = nullptr;
+    phoSCEta = nullptr;
+    phoMIPTotEnergy = nullptr;
+    phoSigmaIEtaIEtaFull5x5 = nullptr;
+    phoSigmaIPhiIPhiFull5x5 = nullptr;
+    phoSeedTime = nullptr;
+    phohasPixelSeed = nullptr;
+    phoSCEtaWidth = nullptr;
+    phoHaloTaggerMVAVal = nullptr;
+    phoIDbit = nullptr;
+    AK4PUPPIJet_Pt = nullptr;
+    AK4PUPPIJet_Eta = nullptr;
+    AK4PUPPIJet_Phi = nullptr;
+    AK4PUPPIJet_jetID = nullptr;
+    
+    // Set branch addresses
+    tree->SetBranchAddress("nPho", &nPho);
+    tree->SetBranchAddress("phoPt", &phoPt);
+    tree->SetBranchAddress("phoPhi", &phoPhi);
+    tree->SetBranchAddress("phoSCEta", &phoSCEta);
+    tree->SetBranchAddress("phoMIPTotEnergy", &phoMIPTotEnergy);
+    tree->SetBranchAddress("phoSigmaIEtaIEtaFull5x5", &phoSigmaIEtaIEtaFull5x5);
+    tree->SetBranchAddress("phoSigmaIPhiIPhiFull5x5", &phoSigmaIPhiIPhiFull5x5);
+    tree->SetBranchAddress("phoSeedTime", &phoSeedTime);
+    tree->SetBranchAddress("phohasPixelSeed", &phohasPixelSeed);
+    tree->SetBranchAddress("phoSCEtaWidth", &phoSCEtaWidth);
+    tree->SetBranchAddress("phoHaloTaggerMVAVal", &phoHaloTaggerMVAVal);
+    tree->SetBranchAddress("phoIDbit", &phoIDbit);
+    tree->SetBranchAddress("genWeight", &genWeight);
+    
+    // Jet branches
+    tree->SetBranchAddress("nAK4PUPPIJet", &nAK4PUPPIJet);
+    tree->SetBranchAddress("AK4PUPPIJet_Pt", &AK4PUPPIJet_Pt);
+    tree->SetBranchAddress("AK4PUPPIJet_Eta", &AK4PUPPIJet_Eta);
+    tree->SetBranchAddress("AK4PUPPIJet_Phi", &AK4PUPPIJet_Phi);
+    tree->SetBranchAddress("AK4PUPPIJet_jetID", &AK4PUPPIJet_jetID);
+          
+    // MET branches
+    tree->SetBranchAddress("PuppiMET_pt", &PuppiMET_pt);
+    tree->SetBranchAddress("PuppiMET_phi", &PuppiMET_phi);
+    
+    // HLT trigger
+    tree->SetBranchAddress("HLTriggerWord0", &HLTriggerWord0);
+          
+    // MET filter branches
+    tree->SetBranchAddress("Flag_goodVertices", &Flag_goodVertices);
+    tree->SetBranchAddress("Flag_globalSuperTightHalo2016Filter", &Flag_globalSuperTightHalo2016Filter);
+    tree->SetBranchAddress("Flag_EcalDeadCellTriggerPrimitiveFilter", &Flag_EcalDeadCellTriggerPrimitiveFilter);
+    tree->SetBranchAddress("Flag_BadPFMuonFilter", &Flag_BadPFMuonFilter);
+    tree->SetBranchAddress("Flag_BadPFMuonDzFilter", &Flag_BadPFMuonDzFilter);
+    tree->SetBranchAddress("Flag_hfNoisyHitsFilter", &Flag_hfNoisyHitsFilter);
+    tree->SetBranchAddress("Flag_eeBadScFilter", &Flag_eeBadScFilter);
+  }
+
+  int getValidLeadingPhotonIndex() {
+    if (nPho < 1) return -1;
+    if (!phoPt || phoPt->empty()) return -1;
+    
+    std::vector<std::pair<float, int>> photonPtIndex;
+    for (int i = 0; i < nPho && i < phoPt->size(); i++) {
+      photonPtIndex.push_back(std::make_pair(phoPt->at(i), i));
+    }
+    
+    std::sort(photonPtIndex.begin(), photonPtIndex.end(),
+              std::greater<std::pair<float, int>>());
+    if (photonPtIndex[0].first <= 200.0) return -1;
+    
+    if (photonPtIndex.size() > 1) {
+      if (photonPtIndex[1].first > 200.0) return -1;
+    }
+    return photonPtIndex[0].second;
+  }
+
+  bool passMETCuts() {
+    return (PuppiMET_pt > 200.0);
+  }
+  
+  void setupOutputHistograms(const std::string& outputFileName) {
+    outputFile = new TFile(outputFileName.c_str(), "RECREATE");
+
+    const int nBins_pT = 6;
+    Double_t bins_pT[7] = {225, 275, 350, 450, 600, 800, 1500};
+    const int nBins_met = 5;
+    Double_t bins_met[6] = {225, 275, 350, 450, 600, 1000};
+    
+    // Create unweighted histograms
+    h_pT_pho_EB = new TH1F("h_pT_EB", "Photon p_{T} - Barrel (Unweighted);p_{T} [GeV];Events", nBins_pT, bins_pT);
+    h_pT_pho_EE = new TH1F("h_pT_EE", "Photon p_{T} - Endcap (Unweighted);p_{T} [GeV];Events", nBins_pT, bins_pT);
+    h_eta_pho_EB = new TH1F("h_eta_EB", "Photon #eta - Barrel (Unweighted);#eta;Events", 15, -2.0, 2.0);
+    h_eta_pho_EE = new TH1F("h_eta_EE", "Photon #eta - Endcap (Unweighted);#eta;Events", 15, -3.5, 3.5);
+    h_phi_pho_EB = new TH1F("h_phi_EB", "Photon #phi - Barrel;#phi;Events", 15, -3.5, 3.5);
+    h_phi_pho_EE = new TH1F("h_phi_EE", "Photon #phi - Endcap;#phi;Events", 15, -3.5, 3.5);
+    h_pt_Met_EB = new TH1F("h_MET_pt_EB", "MET p_{T} - Barrel (Unweighted);p_{T} [GeV];Events", nBins_met,bins_met);
+    h_phi_Met_EB = new TH1F("h_MET_phi_EB", "MET #phi - Barrel (Unweighted);#phi;Events", 15, -3.2, 3.2);
+    h_pt_Met_EE = new TH1F("h_MET_pt_EE", "MET p_{T} - Endcap (Unweighted);p_{T} [GeV];Events", nBins_met,bins_met);
+    h_phi_Met_EE = new TH1F("h_MET_phi_EE", "MET #phi - Endcap (Unweighted);#phi;Events", 15, -3.5, 3.5);
+    h_jet_deltaPhi_MET_EB = new TH1F("h_jet_deltaPhi_MET_EB", "#Delta#phi(jet, MET) Barrel (Unweighted);#Delta#phi;Events", 10, 0, 3.2);
+    h_deltaR_pho_jet_EB = new TH1F("h_deltaR_pho_jet_EB", "#DeltaR(#gamma, jet) Barrel (Unweighted);#DeltaR;Events", 10, 0, 5);
+    h_jet_deltaPhi_MET_EE = new TH1F("h_jet_deltaPhi_MET_EE", "#Delta#phi(jet, MET) Endcap (Unweighted);#Delta#phi;Events", 10, 0, 3.2);
+    h_deltaR_pho_jet_EE = new TH1F("h_deltaR_pho_jet_EE", "#DeltaR(#gamma, jet) Endcap (Unweighted);#DeltaR;Events", 10, 0, 5);
+    h_cutflow = new TH1F("h_cutflow", "Cut Flow (Unweighted);Cut;Events", 13, 0, 13);
+    
+    // Create weighted histograms
+    h_pT_pho_EB_weighted = new TH1F("h_pT_EB_weighted", "Photon p_{T} - Barrel (Weighted);p_{T} [GeV];Events", nBins_pT, bins_pT);
+    h_pT_pho_EE_weighted = new TH1F("h_pT_EE_weighted", "Photon p_{T} - Endcap (Weighted);p_{T} [GeV];Events", nBins_pT, bins_pT);
+    h_eta_pho_EB_weighted = new TH1F("h_eta_EB_weighted", "Photon #eta - Barrel (Weighted);#eta;Events", 15, -2.0, 2.0);
+    h_eta_pho_EE_weighted = new TH1F("h_eta_EE_weighted", "Photon #eta - Endcap (Weighted);#eta;Events", 15, -3.5, 3.5);
+    h_phi_pho_EB_weighted = new TH1F("h_phi_EB_weighted", "Photon #phi - Barrel (_weighted);#phi;Events", 15, -3.5, 3.5);
+    h_phi_pho_EE_weighted = new TH1F("h_phi_EE_weighted", "Photon #phi - Endcap (_weighted);#phi;Events", 15, -3.5, 3.5);
+    h_pt_Met_EB_weighted = new TH1F("h_MET_pt_EB_weighted", "MET p_{T} - Barrel (Weighted);p_{T} [GeV];Events", nBins_met,bins_met);
+    h_phi_Met_EB_weighted = new TH1F("h_MET_phi_EB_weighted", "MET #phi - Barrel (Weighted);#phi;Events", 15, -3.2, 3.2);
+    h_pt_Met_EE_weighted = new TH1F("h_MET_pt_EE_weighted", "MET p_{T} - Endcap (Weighted);p_{T} [GeV];Events", nBins_met,bins_met);
+    h_phi_Met_EE_weighted = new TH1F("h_MET_phi_EE_weighted", "MET #phi - Endcap (Weighted);#phi;Events", 15, -3.2, 3.2);
+    h_jet_deltaPhi_MET_EB_weighted = new TH1F("h_jet_deltaPhi_MET_EB_weighted", "#Delta#phi(jet, MET) Barrel (weighted);#Delta#phi;Events", 10, 0, 3.2);
+    h_deltaR_pho_jet_EB_weighted = new TH1F("h_deltaR_pho_jet_EB_weighted", "#DeltaR(#gamma, jet) Barrel (weighted);#DeltaR;Events", 10, 0, 5);
+    h_jet_deltaPhi_MET_EE_weighted = new TH1F("h_jet_deltaPhi_MET_EE_weighted", "#Delta#phi(jet, MET) Endcap (weighted);#Delta#phi;Events", 10, 0, 3.2);
+    h_deltaR_pho_jet_EE_weighted = new TH1F("h_deltaR_pho_jet_EE_weighted", "#DeltaR(#gamma, jet) Endcap (weighted);#DeltaR;Events", 10, 0, 5);
+  }
+
+  void processEvents(TTree* tree) {
+    Long64_t nentries = tree->GetEntries();
+    for (Long64_t i = 0; i < nentries; i++) {
+      tree->GetEntry(i);
+      double currentEventWeight = genWeight;
+      total_events += currentEventWeight;
+      int leadingPhotonIndex = getValidLeadingPhotonIndex();
+      if (leadingPhotonIndex == -1) continue;
+      if (!leadingPhotonIndex >= 0 && !passMETCuts()) continue;
+      photon_met_cuts_pass += currentEventWeight;
+      // HLT trigger
+      bool HLT_Photon200 = (HLTriggerWord0 & (1ULL << 11)) != 0;
+      if (!HLT_Photon200) continue;
+      hlt_pass += currentEventWeight;
+      // MET filters
+      if (!Flag_goodVertices) continue;
+      if (!Flag_globalSuperTightHalo2016Filter) continue;
+      if (!Flag_EcalDeadCellTriggerPrimitiveFilter) continue;
+      if (!Flag_BadPFMuonFilter) continue;
+      if (!Flag_BadPFMuonDzFilter) continue;
+      if (!Flag_hfNoisyHitsFilter) continue;
+      if (!Flag_eeBadScFilter) continue;
+      met_filters_pass += currentEventWeight;
+
+      //std::cout<<" nPho2 "<<nPho<<std::endl;
+      
+      // Photon loop
+      int iPho = leadingPhotonIndex;
+      if (phoPt->at(iPho) <= 225.0) continue;
+      pt_pass += currentEventWeight;
+      //std::cout<<" nPho3 "<<nPho<<std::endl;
+      if (phohasPixelSeed->at(iPho) != 0) continue;
+      pixel_seed_veto_pass++;
+      if (phoHaloTaggerMVAVal->at(iPho) <= 0.995) continue;
+      beamhalo_pass += currentEventWeight;
+
+      if(!(((phoIDbit->at(iPho) >> 2) & 1) == 1)) continue;
+      tight_id_pass += currentEventWeight;
+      
+      float pT_over_MET = phoPt->at(iPho) / PuppiMET_pt;
+      if (pT_over_MET >= 1.4) continue;
+
+      Double_t deltaPhi_pho_MET = fabs(deltaPhi(phoPhi->at(iPho), PuppiMET_phi));
+      if (deltaPhi_pho_MET <= 2.0) continue;
+      met_cuts_pass += currentEventWeight;
+      
+      Double_t deltaR_pho_jet = 0;
+      Double_t deltaPhi_jet_MET = 0;
+      // JET VETO
+      bool JetVeto = false;
+      
+      for (int iJet = 0; iJet < nAK4PUPPIJet; iJet++) {
+	if(AK4PUPPIJet_Pt->at(iJet) <= 30.0) continue;
+	if(fabs(AK4PUPPIJet_Eta->at(iJet)) >= 5.0) continue;
+	if(AK4PUPPIJet_jetID->at(iJet) < 0.5) continue;
+	
+	deltaR_pho_jet = deltaR(phoSCEta->at(iPho), phoPhi->at(iPho), 
+				AK4PUPPIJet_Eta->at(iJet), AK4PUPPIJet_Phi->at(iJet));
+	
+	deltaPhi_jet_MET = fabs(deltaPhi(AK4PUPPIJet_Phi->at(iJet), PuppiMET_phi));
+	if (deltaR_pho_jet <= 0.5) continue;
+	if (deltaPhi_jet_MET < 0.5) {
+            JetVeto = true;
+            break;
+          }
+      }
+      
+      if (JetVeto) continue;
+      jet_veto_pass += currentEventWeight;
+      
+      /*if(deltaR_pho_jet<=0.5)std::cout<<"deltaR_pho_jet " << deltaR_pho_jet<<std::endl;
+	if(deltaPhi_jet_MET<=0.5)std::cout<<"deltaPhi_jet_MET " << deltaPhi_jet_MET<<std::endl;*/
+      
+      float abs_eta_SC = fabs(phoSCEta->at(iPho));
+      bool isBarrel = (abs_eta_SC < 1.4442);
+      bool isEndcap = (abs_eta_SC > 1.566 && abs_eta_SC < 2.5);
+      
+      if (isBarrel) {
+	barrel_pass += currentEventWeight;
+	bool passMIP = (phoMIPTotEnergy->at(iPho) < 4.9);
+	bool passSigmaIetaIeta = (phoSigmaIEtaIEtaFull5x5->at(iPho) > 0.001);
+	bool passSigmaIphiIphi = (phoSigmaIPhiIPhiFull5x5->at(iPho) > 0.001);
+	bool passEtaWidth = (phoSCEtaWidth->at(iPho) > 0.01);
+	bool passTiming = (fabs(phoSeedTime->at(iPho)) < 3.0);
+	
+	//if (passMIP && passSigmaIetaIeta && passSigmaIphiIphi && passEtaWidth && passTiming) {
+	if (passMIP && passSigmaIetaIeta && passSigmaIphiIphi && passTiming) {
+	  barrel_all_cuts += currentEventWeight;
+	  
+	  eventWeight = genWeight * eventWeightFactor;
+
+	  std::cout<<" currentEventWeight "<< currentEventWeight<< " genWeight " <<genWeight<<std::endl;
+	  
+	  // Fill unweighted histograms
+	  h_pT_pho_EB->Fill(phoPt->at(iPho));
+	  h_eta_pho_EB->Fill(phoSCEta->at(iPho));
+	  h_phi_pho_EB->Fill(phoPhi->at(iPho));
+	  h_pt_Met_EB->Fill(PuppiMET_pt);
+	  h_phi_Met_EB->Fill(PuppiMET_phi);
+	  h_deltaR_pho_jet_EB->Fill(deltaR_pho_jet);
+	  h_jet_deltaPhi_MET_EB->Fill(deltaPhi_jet_MET);
+	  
+	  // Fill weighted histograms
+	  h_pT_pho_EB_weighted->Fill(phoPt->at(iPho), eventWeight);
+	  h_eta_pho_EB_weighted->Fill(phoSCEta->at(iPho), eventWeight);
+	  h_phi_pho_EB_weighted->Fill(phoPhi->at(iPho), eventWeight);
+	  h_pt_Met_EB_weighted->Fill(PuppiMET_pt, eventWeight);
+	  h_phi_Met_EB_weighted->Fill(PuppiMET_phi, eventWeight);
+	  h_deltaR_pho_jet_EB_weighted->Fill(deltaR_pho_jet, eventWeight);
+	  h_jet_deltaPhi_MET_EB_weighted->Fill(deltaPhi_jet_MET, eventWeight);
+	    
+	}
+      } else if (isEndcap) {
+	endcap_pass += currentEventWeight;
+	eventWeight = genWeight * eventWeightFactor;
+	// Fill unweighted histograms
+	h_pT_pho_EE->Fill(phoPt->at(iPho));
+	h_eta_pho_EE->Fill(phoSCEta->at(iPho));
+	h_phi_pho_EE->Fill(phoPhi->at(iPho));
+	h_pt_Met_EE->Fill(PuppiMET_pt);
+	h_phi_Met_EE->Fill(PuppiMET_phi);
+	h_deltaR_pho_jet_EE->Fill(deltaR_pho_jet);
+	h_jet_deltaPhi_MET_EE->Fill(deltaPhi_jet_MET);
+	
+	// Fill weighted histograms
+	h_pT_pho_EE_weighted->Fill(phoPt->at(iPho), eventWeight);
+	h_eta_pho_EE_weighted->Fill(phoSCEta->at(iPho), eventWeight);
+	h_phi_pho_EE_weighted->Fill(phoPhi->at(iPho), eventWeight);
+	h_pt_Met_EE_weighted->Fill(PuppiMET_pt, eventWeight);
+	h_phi_Met_EE_weighted->Fill(PuppiMET_phi, eventWeight);
+	h_deltaR_pho_jet_EE_weighted->Fill(deltaR_pho_jet, eventWeight);
+	h_jet_deltaPhi_MET_EE_weighted->Fill(deltaPhi_jet_MET, eventWeight);
+      }
+    }
+  }
+  
+  void saveHistograms() {
+    outputFile->cd();
+    
+    h_cutflow->SetBinContent(1, total_events);
+    h_cutflow->SetBinContent(2, photon_met_cuts_pass);
+    h_cutflow->SetBinContent(3, hlt_pass);
+    h_cutflow->SetBinContent(4, met_filters_pass);
+    h_cutflow->SetBinContent(5, pt_pass);
+    h_cutflow->SetBinContent(6, pixel_seed_veto_pass);
+    h_cutflow->SetBinContent(7, beamhalo_pass);
+    h_cutflow->SetBinContent(8, tight_id_pass);
+    h_cutflow->SetBinContent(9, met_cuts_pass);
+    h_cutflow->SetBinContent(10, jet_veto_pass);
+    h_cutflow->SetBinContent(11, barrel_pass);
+    h_cutflow->SetBinContent(12, barrel_all_cuts);
+    h_cutflow->SetBinContent(13, endcap_pass);
+
+    // Write all histograms
+    h_pT_pho_EB->Write();
+    h_pT_pho_EE->Write();
+    h_eta_pho_EB->Write();
+    h_eta_pho_EE->Write();
+    h_phi_pho_EB->Write();
+    h_phi_pho_EE->Write();
+    h_pt_Met_EB->Write();
+    h_phi_Met_EB->Write();
+    h_pt_Met_EE->Write();
+    h_phi_Met_EE->Write();
+    h_jet_deltaPhi_MET_EB->Write();
+    h_deltaR_pho_jet_EB->Write();
+    h_jet_deltaPhi_MET_EE->Write();
+    h_deltaR_pho_jet_EE->Write();
+    h_cutflow->Write();
+     
+    outputFile->Write();
+    outputFile->Close();
+  }
+  
+  double calculateSumGenWeights(const std::vector<std::string>& inputFiles) {
+    double totalSumGenWeights = 0.0;
+    for (const std::string& filename : inputFiles) {
+      TFile* file = TFile::Open(filename.c_str(), "READ");
+      TTree* tree = (TTree*)file->Get("ggNtuplizer/EventTree");
+       Float_t genWeight;
+       tree->SetBranchAddress("genWeight", &genWeight);
+       Long64_t nentries = tree->GetEntries();
+       std::cout<<" Total entry "<<nentries<<std::endl;
+       for (Long64_t i = 0; i < nentries; i++) {
+          tree->GetEntry(i);
+	  // std::cout<<" genWeight "<<genWeight<<" totalSumGenWeights "<<totalSumGenWeights<<std::endl;
+          totalSumGenWeights += genWeight;
+	}
+       file->Close();
+      delete file;
+      // std::cout<<" totalSumGenWeights "<<totalSumGenWeights<<std::endl;
+    }
+    std::cout<<" totalSumGenWeights "<<totalSumGenWeights<<std::endl;
+    return totalSumGenWeights;
+  }
+
+  void processMultipleFiles(const std::vector<std::string>& inputFiles, const std::string& outputFileName) {
+    setupOutputHistograms(outputFileName);
+    
+    currentSample = extractSampleType(inputFiles[0]);
+    
+    sumGenWeights = calculateSumGenWeights(inputFiles);
+    eventWeightFactor = (crossSections[currentSample] * totalLuminosity * 100.0) /sumGenWeights;
+
+     std::cout<<"currentSample "<<currentSample<<" crossSections[currentSample] "<<crossSections[currentSample]<<" totalLuminosity "<<totalLuminosity<<" eventWeightFactor "<<eventWeightFactor<<std::endl;
+    
+    for (size_t i = 0; i < inputFiles.size(); i++) {
+      
+      TFile* inputFile = TFile::Open(inputFiles[i].c_str(), "READ"); 
+      TTree* tree = (TTree*)inputFile->Get("ggNtuplizer/EventTree");
+      
+      setupInputBranches(tree);
+      processEvents(tree);
+      inputFile->Close();
+      delete inputFile;
+    }
+    
+    saveHistograms();
+  }
+
+  void processFileList(const std::string& fileListPath, const std::string& outputFileName) {
+    std::ifstream fileList(fileListPath);
+    std::vector<std::string> inputFiles;
+    std::string line;
+    
+    while (std::getline(fileList, line)) {
+      line.erase(0, line.find_first_not_of(" \t\r\n"));
+      line.erase(line.find_last_not_of(" \t\r\n") + 1);
+      
+      if (!line.empty() && line[0] != '#') {
+        inputFiles.push_back(line);
+      }
+    }
+    fileList.close();
+    
+    processMultipleFiles(inputFiles, outputFileName);
+  }
+  
+};
+
+int main(int argc, char* argv[]) {
+  
+  std::string outputFileName = argv[1];
+  std::string fileListPath = argv[3];
+  
+  MCPhotonAnalyser analyser;
+  analyser.processFileList(fileListPath, outputFileName);
+   
+  return 0;
+}
