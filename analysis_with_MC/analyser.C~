@@ -99,24 +99,19 @@ private:
   TH1F* h_deltaR_pho_jet_EE_weighted;
     
   // Counters
-  double total_events;
-  double photon_met_cuts_pass;
-  double hlt_pass;
-  double met_filters_pass;
-  double pt_pass;
-  double pixel_seed_veto_pass;
-  double beamhalo_pass;
-  double tight_id_pass;
-  double met_cuts_pass;
-  double jet_veto_pass;
-  double barrel_pass;
-  double endcap_pass;
-  double MIP_pass;
-  double SigmaIetaIeta_pass;
-  double SigmaIphiIphi_pass;
-  double EtaWidth_pass;
-  double Timing_pass;
-  double barrel_all_cuts;
+  int total_events;
+  int photon_met_cuts_pass;
+  int hlt_pass;
+  int met_filters_pass;
+  int pt_pass;
+  int pixel_seed_veto_pass;
+  int beamhalo_pass;
+  int tight_id_pass;
+  int met_cuts_pass;
+  int jet_veto_pass;
+  int barrel_pass;
+  int endcap_pass;
+  int barrel_all_cuts;
   
   // Sample info for weighting
   std::string currentSample;
@@ -133,8 +128,7 @@ public:
     outputFile(nullptr),
     total_events(0), hlt_pass(0), met_filters_pass(0), pt_pass(0), 
     pixel_seed_veto_pass(0), met_cuts_pass(0), jet_veto_pass(0), beamhalo_pass(0),tight_id_pass(0),
-    barrel_pass(0), endcap_pass(0), barrel_all_cuts(0), sumGenWeights(0.0), eventWeightFactor(0.0), eventWeight(0.0), MIP_pass(0.0), SigmaIetaIeta_pass(0.0),SigmaIphiIphi_pass(0.0),EtaWidth_pass(0.0),Timing_pass(0.0)
- {
+    barrel_pass(0), endcap_pass(0), barrel_all_cuts(0), sumGenWeights(0.0), eventWeightFactor(1.0), eventWeight(1.0) {
     
     // Initialize cross sections (in pb)
     crossSections["ZGto2NuG-1Jets_PTG-200to400"] = 7.472e-02;
@@ -311,7 +305,7 @@ public:
     h_deltaR_pho_jet_EB = new TH1F("h_deltaR_pho_jet_EB", "#DeltaR(#gamma, jet) Barrel (Unweighted);#DeltaR;Events", 10, 0, 5);
     h_jet_deltaPhi_MET_EE = new TH1F("h_jet_deltaPhi_MET_EE", "#Delta#phi(jet, MET) Endcap (Unweighted);#Delta#phi;Events", 10, 0, 3.2);
     h_deltaR_pho_jet_EE = new TH1F("h_deltaR_pho_jet_EE", "#DeltaR(#gamma, jet) Endcap (Unweighted);#DeltaR;Events", 10, 0, 5);
-    h_cutflow = new TH1F("h_cutflow", "Cut Flow (Unweighted);Cut;Events", 18, 0, 18);
+    h_cutflow = new TH1F("h_cutflow", "Cut Flow (Unweighted);Cut;Events", 13, 0, 13);
     
     // Create weighted histograms
     h_pT_pho_EB_weighted = new TH1F("h_pT_EB_weighted", "Photon p_{T} - Barrel (Weighted);p_{T} [GeV];Events", nBins_pT, bins_pT);
@@ -334,7 +328,7 @@ public:
     Long64_t nentries = tree->GetEntries();
     for (Long64_t i = 0; i < nentries; i++) {
       tree->GetEntry(i);
-      double currentEventWeight = genWeight * eventWeightFactor;
+      double currentEventWeight = genWeight;
       total_events += currentEventWeight;
       int leadingPhotonIndex = getValidLeadingPhotonIndex();
       if (leadingPhotonIndex == -1) continue;
@@ -362,7 +356,7 @@ public:
       pt_pass += currentEventWeight;
       //std::cout<<" nPho3 "<<nPho<<std::endl;
       if (phohasPixelSeed->at(iPho) != 0) continue;
-      pixel_seed_veto_pass += currentEventWeight;
+      pixel_seed_veto_pass++;
       if (phoHaloTaggerMVAVal->at(iPho) <= 0.995) continue;
       beamhalo_pass += currentEventWeight;
 
@@ -410,27 +404,18 @@ public:
       if (isBarrel) {
 	barrel_pass += currentEventWeight;
 	bool passMIP = (phoMIPTotEnergy->at(iPho) < 4.9);
-	if(!passMIP) continue;
-	MIP_pass += currentEventWeight;
 	bool passSigmaIetaIeta = (phoSigmaIEtaIEtaFull5x5->at(iPho) > 0.001);
-	if(!passSigmaIetaIeta) continue;
-	SigmaIetaIeta_pass += currentEventWeight;
 	bool passSigmaIphiIphi = (phoSigmaIPhiIPhiFull5x5->at(iPho) > 0.001);
-	if(!passSigmaIphiIphi) continue;
-	SigmaIphiIphi_pass += currentEventWeight;
 	bool passEtaWidth = (phoSCEtaWidth->at(iPho) > 0.01);
-	//if(!passEtaWidth) continue;
-	EtaWidth_pass += currentEventWeight;
 	bool passTiming = (fabs(phoSeedTime->at(iPho)) < 3.0);
-	if(!passTiming) continue;
-	Timing_pass += currentEventWeight;
+	
 	//if (passMIP && passSigmaIetaIeta && passSigmaIphiIphi && passEtaWidth && passTiming) {
-	//if (passMIP  passSigmaIetaIeta && passSigmaIphiIphi && passTiming) {
+	if (passMIP && passSigmaIetaIeta && passSigmaIphiIphi && passTiming) {
 	  barrel_all_cuts += currentEventWeight;
 	  
 	  eventWeight = genWeight * eventWeightFactor;
 
-	  //std::cout<<" currentEventWeight "<< currentEventWeight<< " genWeight " <<genWeight<<std::endl;
+	  std::cout<<" currentEventWeight "<< currentEventWeight<< " genWeight " <<genWeight<<std::endl;
 	  
 	  // Fill unweighted histograms
 	  h_pT_pho_EB->Fill(phoPt->at(iPho));
@@ -450,7 +435,7 @@ public:
 	  h_deltaR_pho_jet_EB_weighted->Fill(deltaR_pho_jet, eventWeight);
 	  h_jet_deltaPhi_MET_EB_weighted->Fill(deltaPhi_jet_MET, eventWeight);
 	    
-	  //}
+	}
       } else if (isEndcap) {
 	endcap_pass += currentEventWeight;
 	eventWeight = genWeight * eventWeightFactor;
@@ -478,6 +463,7 @@ public:
   void saveHistograms() {
     outputFile->cd();
     
+    // Fill unweighted cut flow histogram
     h_cutflow->SetBinContent(1, total_events);
     h_cutflow->SetBinContent(2, photon_met_cuts_pass);
     h_cutflow->SetBinContent(3, hlt_pass);
@@ -489,13 +475,8 @@ public:
     h_cutflow->SetBinContent(9, met_cuts_pass);
     h_cutflow->SetBinContent(10, jet_veto_pass);
     h_cutflow->SetBinContent(11, barrel_pass);
-    h_cutflow->SetBinContent(12, MIP_pass);
-    h_cutflow->SetBinContent(13, SigmaIetaIeta_pass);
-    h_cutflow->SetBinContent(14, SigmaIphiIphi_pass);
-    h_cutflow->SetBinContent(15, EtaWidth_pass);
-    h_cutflow->SetBinContent(16, Timing_pass);
-    h_cutflow->SetBinContent(17, barrel_all_cuts);
-    h_cutflow->SetBinContent(18, endcap_pass);
+    h_cutflow->SetBinContent(12, barrel_all_cuts);
+    h_cutflow->SetBinContent(13, endcap_pass);
 
     // Write all histograms
     h_pT_pho_EB->Write();
@@ -526,7 +507,7 @@ public:
        Float_t genWeight;
        tree->SetBranchAddress("genWeight", &genWeight);
        Long64_t nentries = tree->GetEntries();
-       //std::cout<<" Total entry "<<nentries<<std::endl;
+       std::cout<<" Total entry "<<nentries<<std::endl;
        for (Long64_t i = 0; i < nentries; i++) {
           tree->GetEntry(i);
 	  // std::cout<<" genWeight "<<genWeight<<" totalSumGenWeights "<<totalSumGenWeights<<std::endl;
@@ -536,7 +517,7 @@ public:
       delete file;
       // std::cout<<" totalSumGenWeights "<<totalSumGenWeights<<std::endl;
     }
-    //std::cout<<" totalSumGenWeights "<<totalSumGenWeights<<std::endl;
+    std::cout<<" totalSumGenWeights "<<totalSumGenWeights<<std::endl;
     return totalSumGenWeights;
   }
 
@@ -546,9 +527,9 @@ public:
     currentSample = extractSampleType(inputFiles[0]);
     
     sumGenWeights = calculateSumGenWeights(inputFiles);
-    eventWeightFactor = (crossSections[currentSample] * totalLuminosity * 1000.0) /sumGenWeights;
+    eventWeightFactor = (crossSections[currentSample] * totalLuminosity * 100.0) /sumGenWeights;
 
-    //std::cout<<"currentSample "<<currentSample<<" crossSections[currentSample] "<<crossSections[currentSample]<<" totalLuminosity "<<totalLuminosity<<" eventWeightFactor "<<eventWeightFactor<<std::endl;
+     std::cout<<"currentSample "<<currentSample<<" crossSections[currentSample] "<<crossSections[currentSample]<<" totalLuminosity "<<totalLuminosity<<" eventWeightFactor "<<eventWeightFactor<<std::endl;
     
     for (size_t i = 0; i < inputFiles.size(); i++) {
       

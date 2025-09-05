@@ -1,0 +1,7 @@
+/eos/user/p/pravesh/run3/2023/MC/ZGto2NuG-1Jets_PTG-400to600_TuneCP5_13p6TeV_amcatnloFXFX-pythia8/ZGto2NuG-1Jets_PTG-400to600/250825_064048/0000/ntupls_1.root
+/eos/user/p/pravesh/run3/2023/MC/ZGto2NuG-1Jets_PTG-400to600_TuneCP5_13p6TeV_amcatnloFXFX-pythia8/ZGto2NuG-1Jets_PTG-400to600/250825_064048/0000/ntupls_2.root
+/eos/user/p/pravesh/run3/2023/MC/ZGto2NuG-1Jets_PTG-400to600_TuneCP5_13p6TeV_amcatnloFXFX-pythia8/ZGto2NuG-1Jets_PTG-400to600/250825_064048/0000/ntupls_3.root
+/eos/user/p/pravesh/run3/2023/MC/ZGto2NuG-1Jets_PTG-400to600_TuneCP5_13p6TeV_amcatnloFXFX-pythia8/ZGto2NuG-1Jets_PTG-400to600/250825_064048/0000/ntupls_4.root
+/eos/user/p/pravesh/run3/2023/MC/ZGto2NuG-1Jets_PTG-400to600_TuneCP5_13p6TeV_amcatnloFXFX-pythia8/ZGto2NuG-1Jets_PTG-400to600/250825_064048/0000/ntupls_5.root
+/eos/user/p/pravesh/run3/2023/MC/ZGto2NuG-1Jets_PTG-400to600_TuneCP5_13p6TeV_amcatnloFXFX-pythia8/ZGto2NuG-1Jets_PTG-400to600/250825_064048/0000/ntupls_6.root
+/eos/user/p/pravesh/run3/2023/MC/ZGto2NuG-1Jets_PTG-400to600_TuneCP5_13p6TeV_amcatnloFXFX-pythia8/ZGto2NuG-1Jets_PTG-400to600/250825_064048/0000/ntupls_7.root

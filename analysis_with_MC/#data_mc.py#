@@ -1,0 +1,194 @@
+#!/usr/bin/env python3
+"""
+Simple Data-MC Comparison Stacked Histogram Plotter
+"""
+
+import ROOT
+import numpy as np
+import matplotlib.pyplot as plt
+import os
+
+# Set ROOT to batch mode
+ROOT.gROOT.SetBatch(True)
+ROOT.gStyle.SetOptStat(0)
+
+class DataMCPlotter:
+    def __init__(self):
+        # File paths
+        self.files = {
+            'data': 'final_output_data.root',
+            'ZG': 'final_output_ZG.root',      # MC signal
+            'WW': 'final_output_WW.root',      # MC background
+            'WG': 'final_output_WG.root',      # MC background  
+            'TTG': 'final_output_TTG.root'     # MC background
+        }
+        
+        # Colors for different samples
+        self.colors = {
+            'ZG': '#FF6B6B',    # Red for signal
+            'WW': '#4ECDC4',    # Teal
+            'WG': '#45B7D1',    # Blue
+            'TTG': '#96CEB4'    # Green
+        }
+        
+        # Sample labels
+        self.labels = {
+            'data': 'Data',
+            'ZG': 'Z#gamma (Signal)',
+            'WW': 'WW',
+            'WG': 'W#gamma',
+            'TTG': 'tt#gamma'
+        }
+        
+        # Histogram names
+        self.hist_names = {
+            'data': {
+                'pT_EB': 'h_pT_EB',
+                'pT_EE': 'h_pT_EE', 
+                'eta_EB': 'h_eta_EB',
+                'eta_EE': 'h_eta_EE',
+                'phi_EB': 'h_phi_EB',
+                'phi_EE': 'h_phi_EE',
+                'MET_pt_EB': 'h_MET_pt_EB',
+                'MET_phi_EB': 'h_MET_phi_EB'
+            },
+            'mc': {
+                'pT_EB': 'h_pT_EB_weighted',
+                'pT_EE': 'h_pT_EE_weighted',
+                'eta_EB': 'h_eta_EB_weighted', 
+                'eta_EE': 'h_eta_EE_weighted',
+                'phi_EB': 'h_phi_EB_weighted',
+                'phi_EE': 'h_phi_EE_weighted',
+                'MET_pt_EB': 'h_MET_pt_EB_weighted',
+                'MET_phi_EB': 'h_MET_phi_EB_weighted',
+                'MET_pt_EE': 'h_MET_pt_EE_weighted',
+                'MET_phi_EE': 'h_MET_phi_EE_weighted'
+            }
+        }
+
+    def load_histogram(self, file_path, hist_name):
+        """Load histogram from ROOT file"""
+        root_file = ROOT.TFile.Open(file_path, "READ")    
+        hist = root_file.Get(hist_name) 
+        hist_clone = hist.Clone(f"{hist.GetName()}_{file_path.split('/')[-1]}")
+        hist_clone.SetDirectory(0)
+        root_file.Close()
+    return hist_clone
+
+    def hist_to_arrays(self, root_hist):
+        """Convert ROOT histogram to numpy arrays"""
+        n_bins = root_hist.GetNbinsX()
+        bin_centers = np.array([root_hist.GetBinCenter(i) for i in range(1, n_bins + 1)])
+        bin_contents = np.array([root_hist.GetBinContent(i) for i in range(1, n_bins + 1)])
+        bin_errors = np.array([root_hist.GetBinError(i) for i in range(1, n_bins + 1)])
+        bin_edges = np.array([root_hist.GetBinLowEdge(i) for i in range(1, n_bins + 2)])
+        
+    return bin_centers, bin_contents, bin_errors, bin_edges
+
+    def plot_variable(self, var_name):
+        """Create stacked plot with ratio for one variable"""
+        
+        # Create figure with main plot and ratio plot
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 12), 
+                                      gridspec_kw={'height_ratios': [3, 1], 'hspace': 0.05})
+        
+        # Load data histogram
+        data_hist_name = self.hist_names['data'].get(var_name)
+        data_hist = self.load_histogram(self.files['data'], data_hist_name)
+        data_centers, data_contents, data_errors, bin_edges = self.hist_to_arrays(data_hist)
+        
+        # Load MC histograms
+        mc_samples = ['ZG', 'WG', 'TTG']
+        mc_hists = {}
+        
+        for sample in mc_samples:
+            mc_hist_name = self.hist_names['mc'].get(var_name)
+            if mc_hist_name:
+                hist = self.load_histogram(self.files[sample], mc_hist_name)
+                if hist:
+                    mc_hists[sample] = hist
+        
+        # Prepare stacked histograms - sort by total yield (lowest first)
+        mc_data = []
+        for sample in mc_samples:
+            if sample in mc_hists:
+                _, contents, _, _ = self.hist_to_arrays(mc_hists[sample])
+                total_yield = np.sum(contents)
+                mc_data.append((total_yield, sample, contents))
+        
+        # Sort by total yield (ascending - lowest first)
+        mc_data.sort(key=lambda x: x[0])
+        
+        mc_contents_list = []
+        mc_labels = []
+        mc_colors = []
+        
+        for _, sample, contents in mc_data:
+            mc_contents_list.append(contents)
+            mc_labels.append(self.labels[sample])
+            mc_colors.append(self.colors[sample])
+        
+        # Main plot: Stacked MC
+        ax1.hist([bin_edges[:-1]] * len(mc_contents_list), 
+                 weights=mc_contents_list, 
+                 bins=bin_edges, 
+                 label=mc_labels,
+                 color=mc_colors,
+                 alpha=0.8,
+                 stacked=True)
+        
+        # Main plot: Data points
+        ax1.errorbar(data_centers, data_contents, yerr=data_errors, 
+                    fmt='ko', markersize=4, capsize=3, 
+                    label=self.labels['data'])
+        
+        # Styling main plot
+        ax1.set_title(f'{var_name.replace("_", " ")}', fontsize=16)
+        ax1.set_ylabel('Events', fontsize=14)
+        ax1.legend(loc='upper right')
+        ax1.grid(True, alpha=0.3)
+        ax1.set_xticklabels([])  # Remove x labels from main plot
+        
+        # Set log scale for pT variables
+        if 'pT' in var_name or 'MET_pt' in var_name:
+            ax1.set_yscale('log')
+            ax1.set_ylim(bottom=0.1)  # Set minimum for log scale
+        
+        # Ratio plot
+        total_mc = np.sum(mc_contents_list, axis=0)
+        ratio = np.where(total_mc > 0, data_contents / total_mc, 0)
+        
+        ax2.plot(data_centers, ratio, 'ko', markersize=4)  # No error bars
+        ax2.axhline(y=1, color='red', linestyle='--', linewidth=1)
+        ax2.axhline(y=1, color='red', linestyle='--', linewidth=1)
+        ax2.set_xlabel('Variable', fontsize=14)
+        ax2.set_ylabel('Data/MC', fontsize=12)
+        ax2.grid(True, alpha=0.3)
+        ax2.set_xlim(bin_edges[0], bin_edges[-1])
+        ax2.set_ylim(0.5, 1.5)
+        
+        # CMS label
+        ax1.text(0.02, 0.98, 'CMS Preliminary', transform=ax1.transAxes, 
+                fontsize=14, fontweight='bold', verticalalignment='top')
+        
+        # Save plot
+        output_file = f'data_mc_{var_name}.png'
+        plt.savefig(output_file, dpi=300, bbox_inches='tight')
+        plt.close()
+        print(f"Saved: {output_file}")
+
+    def make_all_plots(self):
+        """Create all data-MC comparison plots"""
+        variables = list(self.hist_names['data'].keys())
+        
+        for var in variables:
+            print(f"Making plot for {var}")
+            self.plot_variable(var)
+        
+        print("All plots completed!")
+
+# Simple usage
+plotter = DataMCPlotter()
+
+# Make all plots
+plotter.make_all_plots()
